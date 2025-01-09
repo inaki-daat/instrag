@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 from .api.routes import query
 from .config.settings import get_settings
+import os
 
-app = FastAPI(title=get_settings().app_name)
+# Get settings and set environment variables
+settings = get_settings()
+os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+os.environ["COHERE_API_KEY"] = settings.cohere_api_key
+
+app = FastAPI(title=settings.app_name)
 
 app.include_router(query.router, prefix="/api/v1")
 

@@ -60,7 +60,7 @@ def get_retriever():
 def initialize_retriever():
     """Initialize the retriever with all necessary components"""
     # Initialize LLM and embeddings
-    llm = OpenAI(model="gpt-4")
+    llm = OpenAI(model="gpt-4o")
     Settings.llm = llm
     Settings.embed_model = OpenAIEmbedding(
         model="text-embedding-3-small", embed_batch_size=256
