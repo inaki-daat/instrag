@@ -13,6 +13,7 @@ from llama_index.core.node_parser import SentenceSplitter
 import joblib
 import os
 from functools import lru_cache
+from .utils.cache import Cache
 
 class CustomObjectRetriever:
     def __init__(
@@ -52,36 +53,23 @@ tool with the original query. Do NOT use the other tools for any queries involvi
 
         return tools + [sub_question_tool]
 
-@lru_cache()
-def get_retriever():
-    """Get or create the retriever singleton"""
-    return initialize_retriever()
-
 def initialize_retriever():
-    """Initialize the retriever with all necessary components"""
-    # Initialize LLM and embeddings
-    llm = OpenAI(model="gpt-4o")
-    Settings.llm = llm
-    Settings.embed_model = OpenAIEmbedding(
-        model="text-embedding-3-small", embed_batch_size=256
-    )
+    # Load your documents
+    documents = SimpleDirectoryReader('../files').load_data()
+    
+    # Create the index
+    index = VectorStoreIndex.from_documents(documents)
+    
+    # Get the retriever
+    retriever = index.as_retriever()
+    
+    # Store in cache
+    Cache.get_instance().set('retriever', retriever)
 
-    # Load saved components
-    output_dir = Path("./saved_models")
-    try:
-        retriever = joblib.load(output_dir / "retriever.joblib")
-        object_node_mapping = joblib.load(output_dir / "object_node_mapping.joblib")
-        
-        # Create custom retriever
-        custom_retriever = CustomObjectRetriever(
-            retriever=retriever,
-            object_node_mapping=object_node_mapping,
-            node_postprocessors=[CohereRerank(top_n=5)],
-            llm=llm,
-        )
-        
-        return custom_retriever
-    except Exception as e:
-        print(f"Error loading models: {e}")
-        raise
+def get_retriever():
+    cache = Cache.get_instance()
+    retriever = cache.get('retriever')
+    if retriever is None:
+        raise RuntimeError("Retriever not initialized")
+    return retriever
 
