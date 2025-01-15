@@ -35,9 +35,3 @@ jobs:
             --region $REGION \
             --allow-unauthenticated \
             --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},COHERE_API_KEY=${{ secrets.COHERE_API_KEY }}" \
-            --cpu 2 \
-            --memory 4Gi \
-            --timeout 60 \
-            --startup-probe-initial-delay 600 \
-            --startup-probe-period 30 \
-            --startup-probe-timeout 10
