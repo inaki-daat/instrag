@@ -233,7 +233,7 @@ class DocumentAgent:
 
         return OpenAIAgent.from_tools(
             tool_retriever=custom_retriever,
-            system_prompt="You are a documentation query agent. Always use provided tools; don't rely on prior knowledge.",
+            system_prompt="You are a documentation query agent. Always use provided tools; don't rely on prior knowledge. You should always respond in markdown format.",
             llm=self.llm,
             verbose=True
         )
