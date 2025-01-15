@@ -29,10 +29,23 @@ app.add_middleware(
 app.state.docs_cache = {}
 app.state.is_ready = False
 
+from fastapi import FastAPI, Response, status
+
 @app.get("/health")
 async def health_check():
-    """Simple health check endpoint that returns immediately"""
-    return JSONResponse({"status": "healthy"})
+    """Health check that returns startup status"""
+    if not app.state.is_ready:
+        # During startup, return 200 to keep the instance alive but indicate not ready
+        return Response(
+            content='{"status":"starting"}',
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
+    return Response(
+        content='{"status":"healthy"}',
+        media_type="application/json",
+        status_code=status.HTTP_200_OK
+    )
 
 @app.on_event("startup")
 async def startup_event():
