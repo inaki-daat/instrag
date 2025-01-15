@@ -34,4 +34,12 @@ jobs:
             --platform managed \
             --region $REGION \
             --allow-unauthenticated \
-            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},COHERE_API_KEY=${{ secrets.COHERE_API_KEY }}"
+            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},COHERE_API_KEY=${{ secrets.COHERE_API_KEY }}" \
+            --startup-cpu-boost \
+            --cpu 2 \
+            --memory 4Gi \
+            --timeout 60 \
+            --min-instances 0 \
+            --startup-probe-initial-delay 600 \
+            --startup-probe-period 30 \
+            --startup-probe-timeout 10
