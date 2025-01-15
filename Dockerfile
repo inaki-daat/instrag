@@ -32,5 +32,5 @@ COPY . .
 
 ENV PYTHONPATH=/app
 
-# Run the application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Start with a simple health check endpoint
+CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port 8080 --timeout-keep-alive 120 --lifespan on"]

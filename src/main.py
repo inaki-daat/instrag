@@ -5,6 +5,7 @@ from .config.settings import get_settings
 from .config.logging_config import setup_logging
 from src.core.agent import DocumentAgent
 import os
+from fastapi.responses import JSONResponse
 
 # Set up logging
 logger = setup_logging()
@@ -18,20 +19,34 @@ logger.info("Starting FastAPI application")
 app = FastAPI(title=settings.app_name)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Your frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize empty state
 app.state.docs_cache = {}
+app.state.is_ready = False
 
-app.include_router(query.router, prefix="/api/v1")
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint that returns immediately"""
+    return JSONResponse({"status": "healthy"})
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("Running startup event")
+    try:
+        # Start document loading in the background
+        import asyncio
+        asyncio.create_task(load_documents())
+    except Exception as e:
+        logger.error(f"Error during startup: {str(e)}", exc_info=True)
+        raise
+
+async def load_documents():
+    """Background task to load documents"""
     try:
         # Initialize DocumentAgent
         doc_agent = DocumentAgent(cache_dir="./data/llamaindex_docs")
@@ -48,12 +63,10 @@ async def startup_event():
         # Store in app state
         app.state.docs_cache["agents_dict"] = agents_dict
         app.state.docs_cache["extra_info_dict"] = extra_info_dict
+        app.state.is_ready = True
         logger.info("Stored agents in app state")
     except Exception as e:
-        logger.error(f"Error during startup: {str(e)}", exc_info=True)
+        logger.error(f"Error loading documents: {str(e)}", exc_info=True)
         raise
 
-@app.get("/health")
-async def health_check():
-    logger.debug("Health check endpoint called")
-    return {"status": "healthy"}
+app.include_router(query.router, prefix="/api/v1")
