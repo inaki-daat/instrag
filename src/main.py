@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from .api.routes import query
 from .config.settings import get_settings
@@ -6,6 +6,9 @@ from .config.logging_config import setup_logging
 from src.core.agent import DocumentAgent
 import os
 from fastapi.responses import JSONResponse
+import asyncio
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 
 # Set up logging
 logger = setup_logging()
@@ -28,45 +31,55 @@ app.add_middleware(
 # Initialize empty state
 app.state.docs_cache = {}
 app.state.is_ready = False
-
-from fastapi import FastAPI, Response, status
+app.state.is_loading = False
+app.state.loading_error = None
 
 @app.get("/health")
 async def health_check():
-    """Health check that returns startup status"""
-    if not app.state.is_ready:
-        # During startup, return 200 to keep the instance alive but indicate not ready
-        return Response(
-            content='{"status":"starting"}',
-            media_type="application/json",
-            status_code=status.HTTP_200_OK
-        )
-    return Response(
-        content='{"status":"healthy"}',
-        media_type="application/json",
-        status_code=status.HTTP_200_OK
+    """Health check that returns detailed status"""
+    status_code = status.HTTP_200_OK
+    
+    response_data = {
+        "status": "starting",
+        "is_loading": app.state.is_loading,
+        "is_ready": app.state.is_ready
+    }
+    
+    if app.state.loading_error:
+        response_data["error"] = str(app.state.loading_error)
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    elif app.state.is_ready:
+        response_data["status"] = "healthy"
+    
+    return JSONResponse(
+        content=response_data,
+        status_code=status_code
     )
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Running startup event")
-    try:
-        # Start document loading in the background
-        import asyncio
-        asyncio.create_task(load_documents())
-    except Exception as e:
-        logger.error(f"Error during startup: {str(e)}", exc_info=True)
-        raise
+async def run_in_executor(func, *args):
+    """Run a blocking function in an executor"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(ThreadPoolExecutor(), func, *args)
 
 async def load_documents():
     """Background task to load documents"""
+    if app.state.is_loading:
+        return
+        
+    app.state.is_loading = True
+    app.state.loading_error = None
+    
     try:
         # Initialize DocumentAgent
         doc_agent = DocumentAgent(cache_dir="./data/llamaindex_docs")
         logger.info("DocumentAgent initialized")
         
-        # Load documents
-        docs = doc_agent.load_documents("./files", limit=100)
+        # Load documents in a separate thread
+        docs = await run_in_executor(
+            doc_agent.load_documents,
+            "./files",
+            100  # limit
+        )
         logger.info(f"Loaded {len(docs)} documents")
         
         # Build agents dictionary and cache
@@ -78,8 +91,18 @@ async def load_documents():
         app.state.docs_cache["extra_info_dict"] = extra_info_dict
         app.state.is_ready = True
         logger.info("Stored agents in app state")
+        
     except Exception as e:
         logger.error(f"Error loading documents: {str(e)}", exc_info=True)
+        app.state.loading_error = e
         raise
+    finally:
+        app.state.is_loading = False
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Running startup event")
+    # Start document loading in the background
+    asyncio.create_task(load_documents())
 
 app.include_router(query.router, prefix="/api/v1")
