@@ -13,19 +13,52 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3  # Updated to v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
 
       - name: Auth
-        uses: 'google-github-actions/auth@v0'
+        uses: 'google-github-actions/auth@v1'  # Updated to v1
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
       - name: Set up Cloud SDK
-        uses: 'google-github-actions/setup-gcloud@v0'
+        uses: 'google-github-actions/setup-gcloud@v1'  # Updated to v1
+        with:
+          install_components: 'beta'
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker $REGION-docker.pkg.dev
 
       - name: Build and Push Container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+          platforms: linux/amd64
+          build-contexts: |
+            app=.
+
+      # This is necessary because of a limitation in the cache action
+      - name: Move cache
         run: |
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/$SERVICE_NAME
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Deploy to Cloud Run
         run: |
@@ -38,8 +71,8 @@ jobs:
             --startup-cpu-boost \
             --cpu 2 \
             --memory 4Gi \
-            --timeout 60 \
-            --min-instances 0 \
-            --startup-probe-initial-delay 600 \
+            --timeout 3600 \
+            --min-instances 1 \
+            --startup-probe-initial-delay 300 \
             --startup-probe-period 30 \
             --startup-probe-timeout 10
