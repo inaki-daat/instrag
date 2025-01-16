@@ -82,23 +82,23 @@ class DocumentAgent:
         self.node_parser = SentenceSplitter()
         
     def load_documents(self, directory: str, limit: int = 100) -> List[Document]:
-        """Load documents from a directory"""
-        all_files = [f.resolve() for f in Path(directory).rglob("*")]
-        docs = []
-        
-        for idx, f in enumerate(tqdm(all_files)):
-            if idx >= limit:
-                break
-                
-            loaded_docs = self.reader.load_data(file=f, split_documents=True)
-            if loaded_docs:
-                doc = Document(
-                    text="\n\n".join(d.get_content() for d in loaded_docs),
-                    metadata={"path": str(f)}
-                )
-                docs.append(doc)
-                
-        return docs
+        """Load documents from joblib file"""
+        try:
+            import joblib
+            docs_path = Path('./app/saved_models/docs.joblib')
+            
+            if not docs_path.exists():
+                raise FileNotFoundError(f"Pre-processed documents not found at {docs_path}")
+            
+            logger.info(f"Loading pre-processed documents from {docs_path}")
+            docs = joblib.load(docs_path)
+            logger.info(f"Successfully loaded {len(docs)} documents")
+            
+            return docs
+            
+        except Exception as e:
+            logger.error(f"Error loading documents from joblib: {str(e)}", exc_info=True)
+            raise
 
     async def build_agent_per_doc(self, nodes: List, file_base: str) -> Tuple[OpenAIAgent, str]:
         """Build an agent for a single document"""
